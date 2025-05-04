@@ -11,9 +11,77 @@ import argparse
 import tensorrt as trt
 import pycuda.driver as cuda
 import pycuda.autoinit
+import json
+import json
+import requests
+import sys
+# print(f"Python executable: {sys.executable}")
+# print(f"Current working directory: {os.getcwd()}")
+# print(f"Python path: {sys.path}")
 
 # TensorRT logger singleton
 TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
+
+def download_imagenet_labels(output_path='labels/imagenet_labels.json'):
+    """
+    Download ImageNet class labels and save them to a JSON file.
+    
+    Args:
+        output_path: Path to save the labels JSON file
+    """
+    # Create directory if it doesn't exist
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    # URL for ImageNet class labels
+    url = "https://raw.githubusercontent.com/pytorch/hub/master/imagenet_classes.txt"
+    
+    print(f"Downloading ImageNet labels from {url}")
+    response = requests.get(url)
+    response.raise_for_status()  # Raise an exception for HTTP errors
+    
+    # Parse labels (one per line)
+    labels = [line.strip() for line in response.text.splitlines()]
+    
+    # Create dictionary with class indices as keys and labels as values
+    labels_dict = {f"class_{i}": label for i, label in enumerate(labels)}
+    
+    # Save to JSON file
+    with open(output_path, 'w') as f:
+        json.dump(labels_dict, f, indent=2)
+    
+    print(f"Downloaded {len(labels)} labels and saved to {output_path}")
+    return labels_dict
+
+def load_imagenet_labels(labels_path='labels/imagenet_labels.json'):
+    """
+    Load ImageNet class labels from a JSON file.
+    If the file doesn't exist, download the labels.
+    
+    Args:
+        labels_path: Path to the labels JSON file
+        
+    Returns:
+        Dictionary mapping class indices to label names
+    """
+    abs_path = os.path.abspath(labels_path)
+    print(f"Attempting to load labels from: {abs_path}")
+    
+    if not os.path.exists(labels_path):
+        try:
+            print(f"Labels file not found, downloading to {labels_path}...")
+            return download_imagenet_labels(labels_path)
+        except Exception as e:
+            print(f"Error downloading labels: {e}")
+            return {}
+    
+    try:
+        with open(labels_path, 'r') as f:
+            labels = json.load(f)
+            print(f"Successfully loaded {len(labels)} labels from {labels_path}")
+            return labels
+    except Exception as e:
+        print(f"Error loading labels from {labels_path}: {e}")
+        return {}
 
 def load_image(image_path, target_size=(224, 224)):
     """Load and preprocess an image for inference"""
@@ -238,6 +306,8 @@ def main():
     # Allocate buffers
     inputs, outputs, bindings, stream, context = allocate_buffers(engine)
     
+    labels = load_imagenet_labels()
+
     # Run inference
     print("Running inference...")
     output_data = run_inference(context, inputs, outputs, bindings, stream, input_data)
@@ -252,16 +322,22 @@ def main():
         class_names = load_class_names(args.model)
     
     # Get top 5 predictions
-    top_indices = np.argsort(output)[-5:][::-1]
-    print("\nTop 5 predictions:")
+    top_indices = np.argsort(output[0])[-5:][::-1]
+    print("Top 5 predictions:")
     for i, idx in enumerate(top_indices):
-        if idx < len(class_names):
-            print(f"{i+1}. {class_names[idx]}: {output[idx]:.4f}")
+        class_id = int(idx)
+        prob = float(output[0][idx]) * 100  # Convert to percentage
+        # Try to get the label from our downloaded labels
+        label = labels.get(f"class_{class_id}")
+        if label:
+            print(f"{i+1}. {label}: {prob:.2f}%")
         else:
-            print(f"{i+1}. Class {idx}: {output[idx]:.4f}")
+            print(f"{i+1}. class_{class_id}: {prob:.2f}%")
     
     print(f"\nPrediction complete for: {args.image}")
-    print(f"Top prediction: {class_names[top_indices[0]]} ({output[top_indices[0]]:.4f})")
+    # Use the label from our downloaded labels for the top prediction if available
+    top_label = labels.get(f"class_{top_indices[0]}", class_names[top_indices[0]])
+    print(f"Top prediction: {top_label} ({output[0][top_indices[0]]:.4f})")
 
 if __name__ == "__main__":
     try:

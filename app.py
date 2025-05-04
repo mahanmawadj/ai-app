@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Flask web application for deep learning inference using TensorRT on Windows with RTX GPU.
 This replaces the Jetson-specific implementation from the original repo.
@@ -22,6 +22,9 @@ import ssl
 # Local module imports
 from inference import ObjectDetector, Classifier, PoseEstimator, ActionRecognizer, Segmenter
 from stream import StreamManager, create_ssl_context
+
+# Load testing modules
+from test import check_numpy, check_opencv, check_cuda, check_tensorrt
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -305,6 +308,36 @@ def run_flask_app(args):
 
 
 def main():
+    """Run all checks"""
+    print("=" * 60)
+    print("TensorRT Environment Test")
+    print("=" * 60)
+    
+    # Basic info
+    print(f"Python version: {sys.version}")
+    print(f"Python executable: {sys.executable}")
+    
+    # Check required modules
+    check_numpy()
+    check_opencv()
+    cuda_ok = check_cuda()
+    tensorrt_ok = check_tensorrt()
+    
+    # Summary
+    print("\n" + "=" * 60)
+    print("Test Summary:")
+    if cuda_ok and tensorrt_ok:
+        print("✅ All critical components are installed and working!")
+    else:
+        print("❌ There are issues with your installation:")
+        if not cuda_ok:
+            print("  - CUDA/PyCUDA is not properly installed or configured")
+        if not tensorrt_ok:
+            print("  - TensorRT is not properly installed or configured")
+        print("\nPlease fix these issues before running the TensorRT application.")
+    
+    print("=" * 60)
+    print("Starting main application...")
     """Main entry point"""
     global args
     

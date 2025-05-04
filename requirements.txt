@@ -1,0 +1,23 @@
+# Web server
+flask==2.3.3
+flask-cors==4.0.0
+
+# WebRTC
+aiortc==1.5.0
+aiohttp==3.8.6
+websockets==11.0.3
+
+# Computer vision
+opencv-python==4.8.1.78
+numpy==1.24.3
+Pillow==10.0.1
+
+# TensorRT and GPU
+tensorrt==10.10.0.31
+pycuda==2022.2.2
+
+# SSL certificate generation
+pyopenssl==23.3.0
+
+# Utilities
+requests==2.31.0

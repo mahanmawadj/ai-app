@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TensorRT Web Interface</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 1280px;
+            margin: 0 auto;
+        }
+        
+        .video-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        .controls-panel {
+            margin-top: 20px;
+        }
+        
+        .model-controls {
+            margin-bottom: 15px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        .model-header {
+            cursor: pointer;
+        }
+        
+        .model-body {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #ddd;
+        }
+        
+        video {
+            width: 100%;
+            background-color: #000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="mb-4">TensorRT AI Vision Demo</h1>
+        
+        <div class="row">
+            <div class="col-md-8">
+                <div class="video-container">
+                    <video id="videoOutput" autoplay playsinline muted></video>
+                </div>
+                
+                <div class="d-flex justify-content-center mt-3">
+                    <button id="startButton" class="btn btn-primary me-2">Start Stream</button>
+                    <button id="stopButton" class="btn btn-danger" disabled>Stop Stream</button>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="controls-panel">
+                    <h3>Models</h3>
+                    
+                    <!-- Object Detection Controls -->
+                    <div id="detectionControls" class="model-controls">
+                        <div class="model-header" data-bs-toggle="collapse" data-bs-target="#detectionBody">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="detectionEnabled">
+                                <label class="form-check-label" for="detectionEnabled">Object Detection</label>
+                            </div>
+                        </div>
+                        <div id="detectionBody" class="model-body collapse">
+                            <div class="mb-3">
+                                <label for="detectionThreshold" class="form-label">Confidence Threshold</label>
+                                <input type="range" class="form-range" min="0" max="1" step="0.01" value="0.5" id="detectionThreshold">
+                                <span id="detectionThresholdValue">0.5</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Classification Controls -->
+                    <div id="classificationControls" class="model-controls">
+                        <div class="model-header" data-bs-toggle="collapse" data-bs-target="#classificationBody">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="classificationEnabled">
+                                <label class="form-check-label" for="classificationEnabled">Image Classification</label>
+                            </div>
+                        </div>
+                        <div id="classificationBody" class="model-body collapse">
+                            <div class="mb-3">
+                                <label for="classificationThreshold" class="form-label">Confidence Threshold</label>
+                                <input type="range" class="form-range" min="0" max="1" step="0.01" value="0.5" id="classificationThreshold">
+                                <span id="classificationThresholdValue">0.5</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Pose Estimation Controls -->
+                    <div id="poseControls" class="model-controls">
+                        <div class="model-header" data-bs-toggle="collapse" data-bs-target="#poseBody">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="poseEnabled">
+                                <label class="form-check-label" for="poseEnabled">Pose Estimation</label>
+                            </div>
+                        </div>
+                        <div id="poseBody" class="model-body collapse">
+                            <div class="mb-3">
+                                <label for="poseThreshold" class="form-label">Keypoint Threshold</label>
+                                <input type="range" class="form-range" min="0" max="1" step="0.01" value="0.3" id="poseThreshold">
+                                <span id="poseThresholdValue">0.3</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Action Recognition Controls -->
+                    <div id="actionControls" class="model-controls">
+                        <div class="model-header" data-bs-toggle="collapse" data-bs-target="#actionBody">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="actionEnabled">
+                                <label class="form-check-label" for="actionEnabled">Action Recognition</label>
+                            </div>
+                        </div>
+                        <div id="actionBody" class="model-body collapse">
+                            <div class="mb-3">
+                                <label for="actionThreshold" class="form-label">Confidence Threshold</label>
+                                <input type="range" class="form-range" min="0" max="1" step="0.01" value="0.5" id="actionThreshold">
+                                <span id="actionThresholdValue">0.5</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Segmentation Controls -->
+                    <div id="segmentationControls" class="model-controls">
+                        <div class="model-header" data-bs-toggle="collapse" data-bs-target="#segmentationBody">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="segmentationEnabled">
+                                <label class="form-check-label" for="segmentationEnabled">Segmentation</label>
+                            </div>
+                        </div>
+                        <div id="segmentationBody" class="model-body collapse">
+                            <div class="mb-3">
+                                <label for="segmentationAlpha" class="form-label">Overlay Opacity</label>
+                                <input type="range" class="form-range" min="0" max="1" step="0.01" value="0.5" id="segmentationAlpha">
+                                <span id="segmentationAlphaValue">0.5</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/webrtc.js"></script>
+    <script>
+        // Initialize model states
+        let streamActive = false;
+        let pc = null;
+        
+        // DOM Elements
+        const videoOutput = document.getElementById('videoOutput');
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        
+        // Model toggles
+        const detectionToggle = document.getElementById('detectionEnabled');
+        const classificationToggle = document.getElementById('classificationEnabled');
+        const poseToggle = document.getElementById('poseEnabled');
+        const actionToggle = document.getElementById('actionEnabled');
+        const segmentationToggle = document.getElementById('segmentationEnabled');
+        
+        // Model settings
+        const detectionThreshold = document.getElementById('detectionThreshold');
+        const classificationThreshold = document.getElementById('classificationThreshold');
+        const poseThreshold = document.getElementById('poseThreshold');
+        const actionThreshold = document.getElementById('actionThreshold');
+        const segmentationAlpha = document.getElementById('segmentationAlpha');
+        
+        // Value displays
+        const detectionThresholdValue = document.getElementById('detectionThresholdValue');
+        const classificationThresholdValue = document.getElementById('classificationThresholdValue');
+        const poseThresholdValue = document.getElementById('poseThresholdValue');
+        const actionThresholdValue = document.getElementById('actionThresholdValue');
+        const segmentationAlphaValue = document.getElementById('segmentationAlphaValue');
+        
+        // Update value displays
+        detectionThreshold.addEventListener('input', () => {
+            detectionThresholdValue.textContent = detectionThreshold.value;
+        });
+        
+        classificationThreshold.addEventListener('input', () => {
+            classificationThresholdValue.textContent = classificationThreshold.value;
+        });
+        
+        poseThreshold.addEventListener('input', () => {
+            poseThresholdValue.textContent = poseThreshold.value;
+        });
+        
+        actionThreshold.addEventListener('input', () => {
+            actionThresholdValue.textContent = actionThreshold.value;
+        });
+        
+        segmentationAlpha.addEventListener('input', () => {
+            segmentationAlphaValue.textContent = segmentationAlpha.value;
+        });
+        
+        // Toggle model states
+        detectionToggle.addEventListener('change', async () => {
+            await toggleModel('detection_enabled', detectionToggle.checked);
+        });
+        
+        classificationToggle.addEventListener('change', async () => {
+            await toggleModel('classification_enabled', classificationToggle.checked);
+        });
+        
+        poseToggle.addEventListener('change', async () => {
+            await toggleModel('pose_enabled', poseToggle.checked);
+        });
+        
+        actionToggle.addEventListener('change', async () => {
+            await toggleModel('action_enabled', actionToggle.checked);
+        });
+        
+        segmentationToggle.addEventListener('change', async () => {
+            await toggleModel('segmentation_enabled', segmentationToggle.checked);
+        });
+        
+        // Toggle model API
+        async function toggleModel(endpoint, enabled) {
+            try {
+                const response = await fetch(`/api/${endpoint}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ [endpoint]: enabled })
+                });
+                
+                if (!response.ok) {
+                    console.error(`Failed to set ${endpoint}: ${response.statusText}`);
+                }
+            } catch (error) {
+                console.error(`Error setting ${endpoint}:`, error);
+            }
+        }
+        
+        // Initialize model states
+        async function initModelStates() {
+            try {
+                // Fetch initial model states
+                const endpoints = [
+                    'detection_enabled',
+                    'classification_enabled',
+                    'pose_enabled',
+                    'action_enabled',
+                    'segmentation_enabled'
+                ];
+                
+                for (const endpoint of endpoints) {
+                    const response = await fetch(`/api/${endpoint}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        const toggle = document.getElementById(endpoint.replace('_enabled', 'Enabled'));
+                        if (toggle) {
+                            toggle.checked = data[endpoint];
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error initializing model states:', error);
+            }
+        }
+        
+        // Start stream
+        startButton.addEventListener('click', async () => {
+            if (streamActive) return;
+            
+            try {
+                pc = await startWebRTC(videoOutput);
+                
+                startButton.disabled = true;
+                stopButton.disabled = false;
+                streamActive = true;
+                
+                await initModelStates();
+            } catch (error) {
+                console.error('Error starting stream:', error);
+            }
+        });
+        
+        // Stop stream
+        stopButton.addEventListener('click', async () => {
+            if (!streamActive) return;
+            
+            try {
+                await stopWebRTC(pc);
+                pc = null;
+                
+                startButton.disabled = false;
+                stopButton.disabled = true;
+                streamActive = false;
+            } catch (error) {
+                console.error('Error stopping stream:', error);
+            }
+        });
+    </script>
+</body>
+</html>

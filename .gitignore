@@ -7,3 +7,14 @@
 /__pycache__
 /key.pem
 /cert.pem
+/env
+/models/__pycache__
+*.pth
+/inference/__pycache__/action_recognizer.cpython-310.pyc
+/inference/__pycache__/base.cpython-310.pyc
+/inference/__pycache__/classifier.cpython-310.pyc
+/inference/__pycache__/detector.cpython-310.pyc
+/inference/__pycache__/pose_estimator.cpython-310.pyc
+/inference/__pycache__/segmenter.cpython-310.pyc
+/inference/__pycache__/__init__.cpython-310.pyc
+*.pyc

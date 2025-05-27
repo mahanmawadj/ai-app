@@ -1,7 +1,6 @@
 """
 Inference package for TensorRT on Windows with RTX GPU.
 """
-
 from .base import TRTBase
 from .classifier import Classifier
 from .detector import ObjectDetector

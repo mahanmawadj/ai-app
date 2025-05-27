@@ -1,0 +1,110 @@
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>cf3da75a-7773-4aa5-9f08-85ba4aab4232</ProjectGuid>
+    <ProjectHome>.</ProjectHome>
+    <StartupFile>server.py</StartupFile>
+    <SearchPath>
+    </SearchPath>
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <Name>ai-app</Name>
+    <RootNamespace>ai-app</RootNamespace>
+    <InterpreterId>
+    </InterpreterId>
+    <IsWindowsApplication>False</IsWindowsApplication>
+    <LaunchProvider>Standard Python launcher</LaunchProvider>
+    <CommandLineArguments>
+    </CommandLineArguments>
+    <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
+    <TestFramework>Pytest</TestFramework>
+    <SuppressEnvironmentCreationPrompt>True</SuppressEnvironmentCreationPrompt>
+    <SuppressConfigureTestFrameworkPrompt>true</SuppressConfigureTestFrameworkPrompt>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DebugSymbols>true</DebugSymbols>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <DebugSymbols>true</DebugSymbols>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="app_state.py" />
+    <Compile Include="handlers\model_handlers.py" />
+    <Compile Include="handlers\static_handlers.py" />
+    <Compile Include="handlers\stream_handlers.py" />
+    <Compile Include="handlers\__init__.py" />
+    <Compile Include="config.py" />
+    <Compile Include="inference\action_recognizer.py" />
+    <Compile Include="inference\base.py" />
+    <Compile Include="inference\classifier.py" />
+    <Compile Include="inference\detector.py" />
+    <Compile Include="inference\pose_estimator.py" />
+    <Compile Include="inference\segmenter.py" />
+    <Compile Include="inference\__init__.py" />
+    <Compile Include="models\download_imagenet_labels.py" />
+    <Compile Include="models\download_models.py" />
+    <Compile Include="models\model_handler.py" />
+    <Compile Include="models\__init__.py" />
+    <Compile Include="routes.py" />
+    <Compile Include="server.py" />
+    <Compile Include="test.py" />
+    <Compile Include="stream.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="inference\" />
+    <Folder Include="inference\__pycache__\" />
+    <Folder Include="labels\" />
+    <Folder Include="models\" />
+    <Folder Include="models\action\" />
+    <Folder Include="models\classification\" />
+    <Folder Include="models\detection\" />
+    <Folder Include="models\pose\" />
+    <Folder Include="models\segmentation\" />
+    <Folder Include="models\__pycache__\" />
+    <Folder Include="handlers\" />
+    <Folder Include="static\" />
+    <Folder Include="static\css\" />
+    <Folder Include="static\js\" />
+    <Folder Include="templates\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="cert.pem" />
+    <Content Include="demo-instruct.wav" />
+    <Content Include="inference\__pycache__\action_recognizer.cpython-310.pyc" />
+    <Content Include="inference\__pycache__\base.cpython-310.pyc" />
+    <Content Include="inference\__pycache__\classifier.cpython-310.pyc" />
+    <Content Include="inference\__pycache__\detector.cpython-310.pyc" />
+    <Content Include="inference\__pycache__\pose_estimator.cpython-310.pyc" />
+    <Content Include="inference\__pycache__\segmenter.cpython-310.pyc" />
+    <Content Include="inference\__pycache__\__init__.cpython-310.pyc" />
+    <Content Include="key.pem" />
+    <Content Include="labels\imagenet_class_index.json" />
+    <Content Include="labels\imagenet_labels.json" />
+    <Content Include="models\classification\resnet18.engine" />
+    <Content Include="models\classification\resnet18.onnx" />
+    <Content Include="models\classification\resnet18.txt" />
+    <Content Include="models\resnet18.pth" />
+    <Content Include="models\__pycache__\download_imagenet_labels.cpython-310.pyc" />
+    <Content Include="models\__pycache__\download_models.cpython-310.pyc" />
+    <Content Include="models\__pycache__\model_handler.cpython-310.pyc" />
+    <Content Include="models\__pycache__\model_handler.cpython-312.pyc" />
+    <Content Include="models\__pycache__\__init__.cpython-310.pyc" />
+    <Content Include="models\__pycache__\__init__.cpython-312.pyc" />
+    <Content Include="requirements.txt" />
+    <Content Include="static\css\styles.css" />
+    <Content Include="static\js\client.js" />
+    <Content Include="templates\index.html" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
+  <!-- Uncomment the CoreCompile target to enable the Build command in
+       Visual Studio and specify your pre- and post-build commands in
+       the BeforeBuild and AfterBuild targets below. -->
+  <!--<Target Name="CoreCompile" />-->
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+</Project>

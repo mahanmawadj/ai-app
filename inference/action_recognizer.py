@@ -6,31 +6,81 @@ import os
 import cv2
 import numpy as np
 import pycuda.driver as cuda
+import logging
 from .base import TRTBase
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 class ActionRecognizer(TRTBase):
     """Action recognition model implementation using TensorRT"""
     
-    def __init__(self, model_path, input_size=(224, 224), num_frames=16):
-        """Initialize the action recognizer with model path and parameters"""
+    def __init__(self, model_info=None, labels=None, input_size=(224, 224), num_frames=16):
+        """
+        Initialize the action recognizer with model info and parameters
+        
+        Args:
+            model_info (dict): Dictionary containing model information including paths
+            labels (dict): Dictionary containing class labels
+            input_size (tuple): Image input size (width, height)
+            num_frames (int): Number of frames to use for action recognition
+        """
         self.input_size = input_size
         self.num_frames = num_frames
         self.frame_buffer = []
         
         # Call parent constructor
-        super().__init__(model_path)
+        super().__init__(model_info, labels)
         
         # Load class names
         self.class_names = self._load_class_names()
     
+    def update_model(self, model_info, labels):
+        """
+        Update the model with new model info and labels
+        
+        Args:
+            model_info (dict): Dictionary containing model information including paths
+            labels (dict): Dictionary containing class labels
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        result = super().update_model(model_info, labels)
+        
+        if result:
+            # Reload class names
+            self.class_names = self._load_class_names()
+            # Clear frame buffer
+            self.frame_buffer = []
+        
+        return result
+    
     def _load_class_names(self):
-        """Load action class names from a file if available"""
-        class_file = os.path.splitext(self.model_path)[0] + '.txt'
-        if os.path.exists(class_file):
-            with open(class_file, 'r') as f:
-                return [line.strip() for line in f.readlines()]
+        """Load action class names from labels or from a file if available"""
+        # First, try to use provided labels
+        if self.labels is not None:
+            logger.info("Using provided labels for action recognition")
+            
+            # Check the format and convert if needed
+            if isinstance(self.labels, dict):
+                try:
+                    # Try to extract class names from labels
+                    return [str(label) for label in self.labels.values()]
+                except (AttributeError, TypeError):
+                    logger.warning("Could not convert labels to class names")
+        
+        # If no labels provided or conversion failed, try to load from file
+        if hasattr(self, 'model_path') and self.model_path:
+            class_file = os.path.splitext(self.model_path)[0] + '.txt'
+            if os.path.exists(class_file):
+                with open(class_file, 'r') as f:
+                    class_names = [line.strip() for line in f.readlines()]
+                logger.info(f"Loaded {len(class_names)} class names from {class_file}")
+                return class_names
         
         # Default Kinetics actions as fallback (just a few examples)
+        logger.warning("Using default action classes as fallback")
         return [
             'walking', 'running', 'jumping', 'standing', 'sitting',
             'clapping', 'waving', 'dancing', 'typing', 'eating',
@@ -89,7 +139,7 @@ class ActionRecognizer(TRTBase):
         for idx in top_indices:
             if idx < len(self.class_names):
                 results.append({
-                    'action_id': idx,
+                    'action_id': int(idx),
                     'action_name': self.class_names[idx],
                     'probability': float(probs[idx])
                 })
@@ -98,6 +148,10 @@ class ActionRecognizer(TRTBase):
     
     def infer(self, image):
         """Run inference on an image frame"""
+        if self.context is None or self.engine is None:
+            logger.warning("Engine or context not initialized, cannot run inference")
+            return []
+            
         # Preprocess image
         input_data = self._preprocess_image(image)
         
@@ -105,30 +159,19 @@ class ActionRecognizer(TRTBase):
         if input_data is None:
             return []
         
-        # Copy input data to device
-        cuda.memcpy_htod_async(self.inputs[0]['mem'], input_data, self.stream)
-        
-        # Run inference
-        self.context.execute_async_v2(
-            bindings=self.bindings,
-            stream_handle=self.stream.handle
-        )
-        
-        # Create output arrays
-        output_data = []
-        for output in self.outputs:
-            output_array = np.empty(output['size'], dtype=np.float32)
-            cuda.memcpy_dtoh_async(output_array, output['mem'], self.stream)
-            output_data.append(output_array)
-        
-        # Synchronize the stream
-        self.stream.synchronize()
-        
-        # Postprocess results
-        return self._postprocess_results(output_data)
+        try:
+            # Use the parent class infer method
+            return super().infer(image)
+        except Exception as e:
+            logger.error(f"Error during inference: {e}")
+            return []
     
     def draw_results(self, image, results):
         """Draw action recognition results on the image"""
+        if results is None:
+            logger.warning("No results to draw")
+            return image
+            
         output_image = image.copy()
         
         # Display top predictions

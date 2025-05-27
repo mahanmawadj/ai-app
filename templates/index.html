@@ -1,155 +1,379 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TensorRT Web Interface</title>
+    <title>TensorRT AI Vision Demo</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        .video-container {
-            position: relative;
-            width: 100%;
-            max-width: 1280px;
-            margin: 0 auto;
-        }
-        
-        .video-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-        }
-        
-        .controls-panel {
-            margin-top: 20px;
-        }
-        
-        .model-controls {
-            margin-bottom: 15px;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-        
-        .model-header {
-            cursor: pointer;
-        }
-        
-        .model-body {
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px solid #ddd;
-        }
-        
-        video {
-            width: 100%;
-            background-color: #000;
-        }
-    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-    <div class="container mt-4">
-        <h1 class="mb-4">TensorRT AI Vision Demo</h1>
-        
-        <div class="row">
-            <div class="col-md-8">
-                <div class="video-container">
-                    <video id="videoOutput" autoplay playsinline muted></video>
-                </div>
-                
-                <div class="d-flex justify-content-center mt-3">
-                    <button id="startButton" class="btn btn-primary me-2">Start Stream</button>
-                    <button id="stopButton" class="btn btn-danger" disabled>Stop Stream</button>
+    <!-- Top navigation bar -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">TensorRT AI Vision Demo</a>
+            <div class="connection-status">
+                <span>ICE: <span id="ice-connection-state" class="status-value">new</span></span>
+                <span>Signal: <span id="signaling-state" class="status-value">new</span></span>
+                <div class="stream-controls">
+                    <button id="startButton" class="btn btn-success btn-sm">
+                        <i class="fas fa-play"></i> Start
+                    </button>
+                    <button id="stopButton" class="btn btn-danger btn-sm" disabled>
+                        <i class="fas fa-stop"></i> Stop
+                    </button>
                 </div>
             </div>
-            
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-3">
+        <div class="row">
+            <!-- Left column: Video and results -->
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="video-container">
+                            <audio id="audio" autoplay="true"></audio>
+                            <video id="video" autoplay="true" playsinline="true"></video>
+                            <div class="video-overlay" id="videoOverlay"></div>
+                        </div>
+                        <div class="d-flex justify-content-end mt-2">
+                            <button id="optionsToggle" class="btn btn-outline-secondary btn-sm">
+                                <i class="fas fa-cog"></i> Options
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Options panel (hidden by default) -->
+                <div class="card mt-3" id="optionsPanel" style="display: none;">
+                    <div class="card-header">
+                        <h5>Connection Options</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="option">
+                            <input id="use-datachannel" checked="checked" type="checkbox" />
+                            <label for="use-datachannel">Use datachannel</label>
+                            <select id="datachannel-parameters">
+                                <option value='{"ordered": true}'>Ordered, reliable</option>
+                                <option value='{"ordered": false, "maxRetransmits": 0}'>Unordered, no retransmissions</option>
+                                <option value='{"ordered": false, "maxPacketLifetime": 500}'>Unordered, 500ms lifetime</option>
+                            </select>
+                        </div>
+                        <div class="option">
+                            <input id="use-audio" checked="checked" type="checkbox" />
+                            <label for="use-audio">Use audio</label>
+                            <select id="audio-input">
+                                <option value="" selected>Default device</option>
+                            </select>
+                            <select id="audio-codec">
+                                <option value="default" selected>Default codecs</option>
+                                <option value="opus/48000/2">Opus</option>
+                                <option value="PCMU/8000">PCMU</option>
+                                <option value="PCMA/8000">PCMA</option>
+                            </select>
+                        </div>
+                        <div class="option">
+                            <input id="use-video" checked="checked" type="checkbox" />
+                            <label for="use-video">Use video</label>
+                            <select id="video-input">
+                                <option value="" selected>Default device</option>
+                            </select>
+                            <select id="video-resolution">
+                                <option value="" selected>Default resolution</option>
+                                <option value="320x240">320x240</option>
+                                <option value="640x480">640x480</option>
+                                <option value="960x540">960x540</option>
+                                <option value="1280x720">1280x720</option>
+                            </select>
+                            <select id="video-transform">
+                                <option value="none" selected>No transform</option>
+                                <option value="edges">Edge detection</option>
+                                <option value="cartoon">Cartoon effect</option>
+                                <option value="rotate">Rotate</option>
+                            </select>
+                            <select id="video-codec">
+                                <option value="default" selected>Default codecs</option>
+                                <option value="VP8/90000">VP8</option>
+                                <option value="H264/90000">H264</option>
+                            </select>
+                        </div>
+                        <div class="option">
+                            <input id="use-stun" type="checkbox" />
+                            <label for="use-stun">Use STUN server</label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results area -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5>Results</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="classificationResults" class="result-section active">
+                            <h6>Classification</h6>
+                            <div id="predictionResults" class="predictions-list">
+                                <div class="prediction-item">
+                                    <span class="prediction-label">Start video to see predictions</span>
+                                    <span class="prediction-confidence"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="detectionResults" class="result-section">
+                            <h6>Detection</h6>
+                            <div class="detection-stats">
+                                <div>Objects: <span id="objectCount">0</span></div>
+                                <div>FPS: <span id="processingFps">0</span></div>
+                            </div>
+                            <div id="detectedObjectsList" class="detections-list">
+                                <div class="detection-item">
+                                    <span class="detection-label">Start video to see detections</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="poseResults" class="result-section">
+                            <h6>Pose Estimation</h6>
+                            <div class="pose-stats">
+                                <div>People: <span id="peopleCount">0</span></div>
+                                <div>Keypoints: <span id="keypointCount">0</span></div>
+                            </div>
+                        </div>
+
+                        <div id="actionResults" class="result-section">
+                            <h6>Action Recognition</h6>
+                            <div id="actionPredictionsList" class="predictions-list">
+                                <div class="prediction-item">
+                                    <span class="prediction-label">Start video to see actions</span>
+                                    <span class="prediction-confidence"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="segmentationResults" class="result-section">
+                            <h6>Segmentation</h6>
+                            <div class="segmentation-stats">
+                                <div>Segments: <span id="segmentCount">0</span></div>
+                                <div>Dominant: <span id="dominantSegment">None</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Data Channel Log -->
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5>Data Channel Log</h5>
+                    </div>
+                    <div class="card-body">
+                        <pre id="data-channel" class="log-content"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right column: AI model controls -->
             <div class="col-md-4">
-                <div class="controls-panel">
-                    <h3>Models</h3>
-                    
-                    <!-- Object Detection Controls -->
-                    <div id="detectionControls" class="model-controls">
-                        <div class="model-header" data-bs-toggle="collapse" data-bs-target="#detectionBody">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="detectionEnabled">
-                                <label class="form-check-label" for="detectionEnabled">Object Detection</label>
+                <!-- AI Model Selection section with all models grouped -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5>AI Model Selection</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <!-- Classification Model -->
+                        <div class="model-section p-3 border-bottom">
+                            <h6>Classification Model</h6>
+                            <div id="classificationControls" class="model-controls mb-0">
+                                <div class="model-header" data-bs-toggle="collapse" data-bs-target="#classificationBody">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="classificationEnabled">
+                                        <label class="form-check-label" for="classificationEnabled">Enable Classification</label>
+                                    </div>
+                                </div>
+                                <div id="classificationBody" class="model-body collapse">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <span class="me-2">Current Model:</span>
+                                        <span class="model-status" id="currentModel">Loading...</span>
+                                    </div>
+                                    <div class="d-flex mb-3">
+                                        <select id="modelSelector" class="form-select me-2">
+                                            <option value="resnet18">ResNet18</option>
+                                            <option value="resnet34">ResNet34</option>
+                                            <option value="resnet50">ResNet50</option>
+                                            <option value="mobilenet_v2">MobileNetV2</option>
+                                            <option value="efficientnet_b0">EfficientNet-B0</option>
+                                            <option value="vgg16">VGG16</option>
+                                            <option value="densenet121">DenseNet121</option>
+                                            <option value="inception_v3">Inception V3</option>
+                                        </select>
+                                        <button id="changeModelBtn" class="btn btn-primary">Apply</button>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="classificationThreshold" class="form-label">Confidence Threshold</label>
+                                        <div class="d-flex align-items-center">
+                                            <input type="range" class="form-range me-2" min="0" max="1" step="0.01" value="0.5" id="classificationThreshold">
+                                            <span id="classificationThresholdValue">0.5</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div id="detectionBody" class="model-body collapse">
-                            <div class="mb-3">
-                                <label for="detectionThreshold" class="form-label">Confidence Threshold</label>
-                                <input type="range" class="form-range" min="0" max="1" step="0.01" value="0.5" id="detectionThreshold">
-                                <span id="detectionThresholdValue">0.5</span>
+
+                        <!-- Detection Model -->
+                        <div class="model-section p-3 border-bottom">
+                            <h6>Detection Model</h6>
+                            <div id="detectionControls" class="model-controls mb-0">
+                                <div class="model-header" data-bs-toggle="collapse" data-bs-target="#detectionBody">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="detectionEnabled">
+                                        <label class="form-check-label" for="detectionEnabled">Enable Detection</label>
+                                    </div>
+                                </div>
+                                <div id="detectionBody" class="model-body collapse">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <span class="me-2">Current Model:</span>
+                                        <span class="model-status">SSD300</span>
+                                    </div>
+                                    <div class="d-flex mb-3">
+                                        <select class="form-select me-2">
+                                            <option value="ssd300">SSD300</option>
+                                            <option value="fasterrcnn">Faster R-CNN</option>
+                                            <option value="yolov5">YOLOv5</option>
+                                        </select>
+                                        <button class="btn btn-primary">Apply</button>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="detectionThreshold" class="form-label">Confidence Threshold</label>
+                                        <div class="d-flex align-items-center">
+                                            <input type="range" class="form-range me-2" min="0" max="1" step="0.01" value="0.5" id="detectionThreshold">
+                                            <span id="detectionThresholdValue">0.5</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pose Estimation Model -->
+                        <div class="model-section p-3 border-bottom">
+                            <h6>Pose Estimation Model</h6>
+                            <div id="poseControls" class="model-controls mb-0">
+                                <div class="model-header" data-bs-toggle="collapse" data-bs-target="#poseBody">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="poseEnabled">
+                                        <label class="form-check-label" for="poseEnabled">Enable Pose Estimation</label>
+                                    </div>
+                                </div>
+                                <div id="poseBody" class="model-body collapse">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <span class="me-2">Current Model:</span>
+                                        <span class="model-status">OpenPose</span>
+                                    </div>
+                                    <div class="d-flex mb-3">
+                                        <select class="form-select me-2">
+                                            <option value="openpose">OpenPose</option>
+                                            <option value="hrnet">HRNet</option>
+                                        </select>
+                                        <button class="btn btn-primary">Apply</button>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="poseThreshold" class="form-label">Keypoint Threshold</label>
+                                        <div class="d-flex align-items-center">
+                                            <input type="range" class="form-range me-2" min="0" max="1" step="0.01" value="0.3" id="poseThreshold">
+                                            <span id="poseThresholdValue">0.3</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Recognition Model -->
+                        <div class="model-section p-3 border-bottom">
+                            <h6>Action Recognition Model</h6>
+                            <div id="actionControls" class="model-controls mb-0">
+                                <div class="model-header" data-bs-toggle="collapse" data-bs-target="#actionBody">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="actionEnabled">
+                                        <label class="form-check-label" for="actionEnabled">Enable Action Recognition</label>
+                                    </div>
+                                </div>
+                                <div id="actionBody" class="model-body collapse">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <span class="me-2">Current Model:</span>
+                                        <span class="model-status">I3D</span>
+                                    </div>
+                                    <div class="d-flex mb-3">
+                                        <select class="form-select me-2">
+                                            <option value="i3d">I3D</option>
+                                            <option value="slowfast">SlowFast</option>
+                                        </select>
+                                        <button class="btn btn-primary">Apply</button>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="actionThreshold" class="form-label">Confidence Threshold</label>
+                                        <div class="d-flex align-items-center">
+                                            <input type="range" class="form-range me-2" min="0" max="1" step="0.01" value="0.5" id="actionThreshold">
+                                            <span id="actionThresholdValue">0.5</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Segmentation Model -->
+                        <div class="model-section p-3">
+                            <h6>Segmentation Model</h6>
+                            <div id="segmentationControls" class="model-controls mb-0">
+                                <div class="model-header" data-bs-toggle="collapse" data-bs-target="#segmentationBody">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="segmentationEnabled">
+                                        <label class="form-check-label" for="segmentationEnabled">Enable Segmentation</label>
+                                    </div>
+                                </div>
+                                <div id="segmentationBody" class="model-body collapse">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <span class="me-2">Current Model:</span>
+                                        <span class="model-status">DeepLabV3</span>
+                                    </div>
+                                    <div class="d-flex mb-3">
+                                        <select class="form-select me-2">
+                                            <option value="deeplabv3">DeepLabV3</option>
+                                            <option value="fcn">FCN</option>
+                                        </select>
+                                        <button class="btn btn-primary">Apply</button>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="segmentationAlpha" class="form-label">Overlay Opacity</label>
+                                        <div class="d-flex align-items-center">
+                                            <input type="range" class="form-range me-2" min="0" max="1" step="0.01" value="0.5" id="segmentationAlpha">
+                                            <span id="segmentationAlphaValue">0.5</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    
-                    <!-- Classification Controls -->
-                    <div id="classificationControls" class="model-controls">
-                        <div class="model-header" data-bs-toggle="collapse" data-bs-target="#classificationBody">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="classificationEnabled">
-                                <label class="form-check-label" for="classificationEnabled">Image Classification</label>
-                            </div>
-                        </div>
-                        <div id="classificationBody" class="model-body collapse">
-                            <div class="mb-3">
-                                <label for="classificationThreshold" class="form-label">Confidence Threshold</label>
-                                <input type="range" class="form-range" min="0" max="1" step="0.01" value="0.5" id="classificationThreshold">
-                                <span id="classificationThresholdValue">0.5</span>
-                            </div>
-                        </div>
+                </div>
+
+                <!-- SDP Information -->
+                <div class="card mt-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5>SDP Information</h5>
+                        <button class="btn btn-outline-secondary btn-sm" id="sdpToggle">
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
                     </div>
-                    
-                    <!-- Pose Estimation Controls -->
-                    <div id="poseControls" class="model-controls">
-                        <div class="model-header" data-bs-toggle="collapse" data-bs-target="#poseBody">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="poseEnabled">
-                                <label class="form-check-label" for="poseEnabled">Pose Estimation</label>
+                    <div class="card-body" id="sdpContent">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Offer</h6>
+                                <pre id="offer-sdp" class="sdp-content"></pre>
                             </div>
-                        </div>
-                        <div id="poseBody" class="model-body collapse">
-                            <div class="mb-3">
-                                <label for="poseThreshold" class="form-label">Keypoint Threshold</label>
-                                <input type="range" class="form-range" min="0" max="1" step="0.01" value="0.3" id="poseThreshold">
-                                <span id="poseThresholdValue">0.3</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Action Recognition Controls -->
-                    <div id="actionControls" class="model-controls">
-                        <div class="model-header" data-bs-toggle="collapse" data-bs-target="#actionBody">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="actionEnabled">
-                                <label class="form-check-label" for="actionEnabled">Action Recognition</label>
-                            </div>
-                        </div>
-                        <div id="actionBody" class="model-body collapse">
-                            <div class="mb-3">
-                                <label for="actionThreshold" class="form-label">Confidence Threshold</label>
-                                <input type="range" class="form-range" min="0" max="1" step="0.01" value="0.5" id="actionThreshold">
-                                <span id="actionThresholdValue">0.5</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Segmentation Controls -->
-                    <div id="segmentationControls" class="model-controls">
-                        <div class="model-header" data-bs-toggle="collapse" data-bs-target="#segmentationBody">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="segmentationEnabled">
-                                <label class="form-check-label" for="segmentationEnabled">Segmentation</label>
-                            </div>
-                        </div>
-                        <div id="segmentationBody" class="model-body collapse">
-                            <div class="mb-3">
-                                <label for="segmentationAlpha" class="form-label">Overlay Opacity</label>
-                                <input type="range" class="form-range" min="0" max="1" step="0.01" value="0.5" id="segmentationAlpha">
-                                <span id="segmentationAlphaValue">0.5</span>
+                            <div class="col-md-6">
+                                <h6>Answer</h6>
+                                <pre id="answer-sdp" class="sdp-content"></pre>
                             </div>
                         </div>
                     </div>
@@ -157,160 +381,8 @@
             </div>
         </div>
     </div>
-    
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="js/webrtc.js"></script>
-    <script>
-        // Initialize model states
-        let streamActive = false;
-        let pc = null;
-        
-        // DOM Elements
-        const videoOutput = document.getElementById('videoOutput');
-        const startButton = document.getElementById('startButton');
-        const stopButton = document.getElementById('stopButton');
-        
-        // Model toggles
-        const detectionToggle = document.getElementById('detectionEnabled');
-        const classificationToggle = document.getElementById('classificationEnabled');
-        const poseToggle = document.getElementById('poseEnabled');
-        const actionToggle = document.getElementById('actionEnabled');
-        const segmentationToggle = document.getElementById('segmentationEnabled');
-        
-        // Model settings
-        const detectionThreshold = document.getElementById('detectionThreshold');
-        const classificationThreshold = document.getElementById('classificationThreshold');
-        const poseThreshold = document.getElementById('poseThreshold');
-        const actionThreshold = document.getElementById('actionThreshold');
-        const segmentationAlpha = document.getElementById('segmentationAlpha');
-        
-        // Value displays
-        const detectionThresholdValue = document.getElementById('detectionThresholdValue');
-        const classificationThresholdValue = document.getElementById('classificationThresholdValue');
-        const poseThresholdValue = document.getElementById('poseThresholdValue');
-        const actionThresholdValue = document.getElementById('actionThresholdValue');
-        const segmentationAlphaValue = document.getElementById('segmentationAlphaValue');
-        
-        // Update value displays
-        detectionThreshold.addEventListener('input', () => {
-            detectionThresholdValue.textContent = detectionThreshold.value;
-        });
-        
-        classificationThreshold.addEventListener('input', () => {
-            classificationThresholdValue.textContent = classificationThreshold.value;
-        });
-        
-        poseThreshold.addEventListener('input', () => {
-            poseThresholdValue.textContent = poseThreshold.value;
-        });
-        
-        actionThreshold.addEventListener('input', () => {
-            actionThresholdValue.textContent = actionThreshold.value;
-        });
-        
-        segmentationAlpha.addEventListener('input', () => {
-            segmentationAlphaValue.textContent = segmentationAlpha.value;
-        });
-        
-        // Toggle model states
-        detectionToggle.addEventListener('change', async () => {
-            await toggleModel('detection_enabled', detectionToggle.checked);
-        });
-        
-        classificationToggle.addEventListener('change', async () => {
-            await toggleModel('classification_enabled', classificationToggle.checked);
-        });
-        
-        poseToggle.addEventListener('change', async () => {
-            await toggleModel('pose_enabled', poseToggle.checked);
-        });
-        
-        actionToggle.addEventListener('change', async () => {
-            await toggleModel('action_enabled', actionToggle.checked);
-        });
-        
-        segmentationToggle.addEventListener('change', async () => {
-            await toggleModel('segmentation_enabled', segmentationToggle.checked);
-        });
-        
-        // Toggle model API
-        async function toggleModel(endpoint, enabled) {
-            try {
-                const response = await fetch(`/api/${endpoint}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ [endpoint]: enabled })
-                });
-                
-                if (!response.ok) {
-                    console.error(`Failed to set ${endpoint}: ${response.statusText}`);
-                }
-            } catch (error) {
-                console.error(`Error setting ${endpoint}:`, error);
-            }
-        }
-        
-        // Initialize model states
-        async function initModelStates() {
-            try {
-                // Fetch initial model states
-                const endpoints = [
-                    'detection_enabled',
-                    'classification_enabled',
-                    'pose_enabled',
-                    'action_enabled',
-                    'segmentation_enabled'
-                ];
-                
-                for (const endpoint of endpoints) {
-                    const response = await fetch(`/api/${endpoint}`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        const toggle = document.getElementById(endpoint.replace('_enabled', 'Enabled'));
-                        if (toggle) {
-                            toggle.checked = data[endpoint];
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error('Error initializing model states:', error);
-            }
-        }
-        
-        // Start stream
-        startButton.addEventListener('click', async () => {
-            if (streamActive) return;
-            
-            try {
-                pc = await startWebRTC(videoOutput);
-                
-                startButton.disabled = true;
-                stopButton.disabled = false;
-                streamActive = true;
-                
-                await initModelStates();
-            } catch (error) {
-                console.error('Error starting stream:', error);
-            }
-        });
-        
-        // Stop stream
-        stopButton.addEventListener('click', async () => {
-            if (!streamActive) return;
-            
-            try {
-                await stopWebRTC(pc);
-                pc = null;
-                
-                startButton.disabled = false;
-                stopButton.disabled = true;
-                streamActive = false;
-            } catch (error) {
-                console.error('Error stopping stream:', error);
-            }
-        });
-    </script>
+    <script src="client.js"></script>
 </body>
 </html>

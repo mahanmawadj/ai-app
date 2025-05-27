@@ -9,6 +9,10 @@ import numpy as np
 import tensorrt as trt
 import pycuda.driver as cuda
 import pycuda.autoinit
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # TensorRT logger singleton
 TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
@@ -16,9 +20,16 @@ TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
 class TRTBase:
     """Base class for TensorRT inference models"""
     
-    def __init__(self, model_path):
-        """Initialize TensorRT engine and context"""
-        self.model_path = model_path
+    def __init__(self, model_info=None, labels=None):
+        """
+        Initialize TensorRT engine and context
+        
+        Args:
+            model_info (dict): Dictionary containing model information including paths
+            labels (dict): Dictionary containing class labels
+        """
+        self.model_info = model_info
+        self.labels = labels
         self.engine = None
         self.context = None
         self.input_names = []
@@ -28,35 +39,107 @@ class TRTBase:
         self.bindings = []
         self.stream = cuda.Stream()
         
-        # Load TRT engine
-        self._load_engine()
+        # Only load engine if model_info is provided
+        if model_info is not None and 'path' in model_info:
+            self.model_path = model_info.get('trt_path') or model_info.get('onnx_path') or model_info.get('path')
+            # Load TRT engine
+            self._load_engine()
+            
+            # Allocate buffers and create bindings
+            self._allocate_buffers()
+        else:
+            logger.warning("Model info not provided or incomplete. Engine not loaded.")
+            self.model_path = None
+    
+    def update_model(self, model_info, labels):
+        """
+        Update the model with new model info and labels
         
-        # Allocate buffers and create bindings
-        self._allocate_buffers()
+        Args:
+            model_info (dict): Dictionary containing model information including paths
+            labels (dict): Dictionary containing class labels
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # Clean up existing resources if any
+            self._cleanup()
+            
+            # Update model info and labels
+            self.model_info = model_info
+            self.labels = labels
+            
+            # Only load engine if model_info is provided
+            if model_info is not None and 'path' in model_info:
+                self.model_path = model_info.get('trt_path') or model_info.get('onnx_path') or model_info.get('path')
+                # Load TRT engine
+                self._load_engine()
+                
+                # Allocate buffers and create bindings
+                self._allocate_buffers()
+                
+                return True
+            else:
+                logger.warning("Model info not provided or incomplete. Engine not loaded.")
+                self.model_path = None
+                return False
+        except Exception as e:
+            logger.error(f"Error updating model: {e}")
+            return False
+    
+    def _cleanup(self):
+        """Clean up resources"""
+        # Release context
+        if hasattr(self, 'context') and self.context:
+            del self.context
+            self.context = None
+        
+        # Release engine
+        if hasattr(self, 'engine') and self.engine:
+            del self.engine
+            self.engine = None
+        
+        # Clear bindings and buffers
+        self.input_names = []
+        self.output_names = []
+        self.inputs = []
+        self.outputs = []
+        self.bindings = []
     
     def _load_engine(self):
         """Load TensorRT engine"""
+        if self.model_path is None:
+            logger.error("Model path is None, cannot load engine")
+            return
+            
         if not os.path.exists(self.model_path):
-            raise FileNotFoundError(f"TensorRT engine file {self.model_path} not found")
+            logger.error(f"TensorRT engine file {self.model_path} not found")
+            return
         
-        print(f"Loading TensorRT engine: {self.model_path}")
+        logger.info(f"Loading TensorRT engine: {self.model_path}")
         
-        # Check if the model is an ONNX file
-        if self.model_path.endswith('.onnx'):
-            # Convert ONNX to TensorRT engine
-            self._build_engine_from_onnx()
-        else:
-            # Load pre-built TensorRT engine
-            with open(self.model_path, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime:
-                self.engine = runtime.deserialize_cuda_engine(f.read())
-        
-        if not self.engine:
-            raise RuntimeError(f"Failed to load TensorRT engine: {self.model_path}")
-        
-        self.context = self.engine.create_execution_context()
-        
-        # Get input and output tensor names
-        self._get_tensor_names()
+        try:
+            # Check if the model is an ONNX file
+            if self.model_path.endswith('.onnx'):
+                # Convert ONNX to TensorRT engine
+                self._build_engine_from_onnx()
+            else:
+                # Load pre-built TensorRT engine
+                with open(self.model_path, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime:
+                    self.engine = runtime.deserialize_cuda_engine(f.read())
+            
+            if not self.engine:
+                logger.error(f"Failed to load TensorRT engine: {self.model_path}")
+                return
+            
+            self.context = self.engine.create_execution_context()
+            
+            # Get input and output tensor names
+            self._get_tensor_names()
+        except Exception as e:
+            logger.error(f"Error loading TensorRT engine: {e}")
+            raise
     
     def _get_tensor_names(self):
         """Get input and output tensor names"""
@@ -65,11 +148,11 @@ class TRTBase:
         self.input_names = ["x"]  # Standard input name for ResNet
         self.output_names = ["191"]  # Standard output name for ResNet
         
-        print(f"Using hardcoded tensor names: inputs={self.input_names}, outputs={self.output_names}")
+        logger.info(f"Using hardcoded tensor names: inputs={self.input_names}, outputs={self.output_names}")
     
     def _build_engine_from_onnx(self):
         """Build TensorRT engine from ONNX model"""
-        print(f"Converting ONNX model to TensorRT engine: {self.model_path}")
+        logger.info(f"Converting ONNX model to TensorRT engine: {self.model_path}")
         
         # For TensorRT 10+
         # Create NetworkDefinition using ONNX parser
@@ -82,40 +165,40 @@ class TRTBase:
              trt.Runtime(TRT_LOGGER) as runtime:
             
             # Configure builder
-            print("Configuring TensorRT builder...")
+            logger.info("Configuring TensorRT builder...")
             
             # Set FP16 mode if supported
             if builder.platform_has_fast_fp16:
                 config.set_flag(trt.BuilderFlag.FP16)
-                print("Using FP16 mode for faster inference")
+                logger.info("Using FP16 mode for faster inference")
             
             # Set memory pool limit 
             config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, 1 << 30)  # 1 GB
             
             # Load and parse ONNX file
-            print(f"Parsing ONNX file: {self.model_path}")
+            logger.info(f"Parsing ONNX file: {self.model_path}")
             with open(self.model_path, 'rb') as model:
                 if not parser.parse(model.read()):
                     for error in range(parser.num_errors):
-                        print(f"ONNX parse error: {parser.get_error(error)}")
+                        logger.error(f"ONNX parse error: {parser.get_error(error)}")
                     raise RuntimeError(f"Failed to parse ONNX file: {self.model_path}")
             
             # Print network info
-            print(f"Network has {network.num_inputs} inputs and {network.num_outputs} outputs")
+            logger.info(f"Network has {network.num_inputs} inputs and {network.num_outputs} outputs")
             for i in range(network.num_inputs):
                 input_tensor = network.get_input(i)
-                print(f"Input {i}: {input_tensor.name}, shape={input_tensor.shape}")
+                logger.info(f"Input {i}: {input_tensor.name}, shape={input_tensor.shape}")
                 # Save the input name
                 self.input_names = [input_tensor.name]
             
             for i in range(network.num_outputs):
                 output_tensor = network.get_output(i)
-                print(f"Output {i}: {output_tensor.name}, shape={output_tensor.shape}")
+                logger.info(f"Output {i}: {output_tensor.name}, shape={output_tensor.shape}")
                 # Save the output name
                 self.output_names = [output_tensor.name]
             
             # Build and serialize engine
-            print("Building TensorRT engine... (this may take a while)")
+            logger.info("Building TensorRT engine... (this may take a while)")
             serialized_engine = builder.build_serialized_network(network, config)
             if not serialized_engine:
                 raise RuntimeError("Failed to build TensorRT engine")
@@ -127,10 +210,14 @@ class TRTBase:
             engine_path = os.path.splitext(self.model_path)[0] + ".engine"
             with open(engine_path, "wb") as f:
                 f.write(serialized_engine)
-            print(f"Saved TensorRT engine to: {engine_path}")
+            logger.info(f"Saved TensorRT engine to: {engine_path}")
     
     def _allocate_buffers(self):
         """Allocate device buffers for input and output"""
+        if self.engine is None:
+            logger.warning("Engine not loaded, cannot allocate buffers")
+            return
+            
         self.inputs = []
         self.outputs = []
         self.bindings = []
@@ -157,9 +244,9 @@ class TRTBase:
                 
                 self.inputs.append(binding_info)
                 self.bindings.append(int(device_mem))
-                print(f"Allocated memory for input: {input_name}, shape={shape}, size={size}")
+                logger.info(f"Allocated memory for input: {input_name}, shape={shape}, size={size}")
             except Exception as e:
-                print(f"Error allocating input buffer: {e}")
+                logger.error(f"Error allocating input buffer: {e}")
                 raise
         
         # Allocate memory for outputs
@@ -184,9 +271,9 @@ class TRTBase:
                 
                 self.outputs.append(binding_info)
                 self.bindings.append(int(device_mem))
-                print(f"Allocated memory for output: {output_name}, shape={shape}, size={size}")
+                logger.info(f"Allocated memory for output: {output_name}, shape={shape}, size={size}")
             except Exception as e:
-                print(f"Error allocating output buffer: {e}")
+                logger.error(f"Error allocating output buffer: {e}")
                 raise
     
     def _preprocess_image(self, image):
@@ -201,6 +288,14 @@ class TRTBase:
     
     def infer(self, image):
         """Run inference on an image"""
+        if self.context is None or self.engine is None:
+            logger.error("Engine or context not initialized, cannot run inference")
+            return None
+            
+        if len(self.inputs) == 0 or len(self.outputs) == 0:
+            logger.error("Buffers not allocated, cannot run inference")
+            return None
+            
         try:
             # Preprocess image
             input_data = self._preprocess_image(image)
@@ -231,15 +326,9 @@ class TRTBase:
             # Postprocess results
             return self._postprocess_results(output_data)
         except Exception as e:
-            print(f"Error during inference: {e}")
+            logger.error(f"Error during inference: {e}")
             raise
     
     def __del__(self):
         """Clean up resources"""
-        # Release context
-        if hasattr(self, 'context') and self.context:
-            del self.context
-        
-        # Release engine
-        if hasattr(self, 'engine') and self.engine:
-            del self.engine
+        self._cleanup()

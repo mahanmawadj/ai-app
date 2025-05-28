@@ -7,7 +7,7 @@ from aiohttp import web
 # Import handlers
 from handlers.static_handlers import index, javascript, css
 from handlers.model_handlers import (
-    get_current_model, get_available_models, change_model,
+    get_current_model, get_available_models, handle_model_change,
     toggle_model, get_model_states
 )
 from handlers.stream_handlers import webrtcoffer
@@ -35,8 +35,8 @@ def setup_routes(app):
     # Model API routes
     app.router.add_get("/api/model", get_current_model)
     app.router.add_get("/api/models", get_available_models)
-    app.router.add_post("/api/model/change", change_model)
-    app.router.add_put("/api/{model_type}_enabled", toggle_model)
-    app.router.add_get("/api/{model_type}_enabled", get_model_states)
+    app.router.add_post("/api/model/change", handle_model_change)
+    app.router.add_put("/api/{model_type}", toggle_model)  # This captures the full "classification_enabled"
+    app.router.add_get("/api/{model_type}", get_model_states)
     
     # You can add more route groups here as needed

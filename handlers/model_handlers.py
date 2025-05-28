@@ -49,7 +49,7 @@ async def get_available_models(request):
     
     return web.Response(content_type="application/json", text=content)
 
-async def change_model(request):
+async def handle_model_change(request):
     """Change the current model based on the request"""
     stream_manager = get_stream_manager()
     
@@ -100,13 +100,32 @@ async def toggle_model(request):
         )
     
     try:
-        # Extract model type from the URL
+        # Extract model type from the URL (e.g., "classification_enabled" from /api/classification_enabled)
         model_type_enabled = request.match_info.get('model_type', '')
-        model_type = model_type_enabled.replace('_enabled', '')
+        
+        # Remove '_enabled' to get just the model type
+        if model_type_enabled.endswith('_enabled'):
+            model_type = model_type_enabled[:-8]  # Remove '_enabled' (8 characters)
+        else:
+            model_type = model_type_enabled
+            model_type_enabled = f"{model_type}_enabled"
         
         # Parse the request data
         data = await request.json()
+        logger.debug(f"Received data: {data}")
+        logger.debug(f"Looking for key: {model_type_enabled}")
+        
+        # The key in the JSON matches the full parameter (e.g., "classification_enabled": true)
         enabled = data.get(model_type_enabled, False)
+        
+        # Ensure enabled is a boolean
+        if isinstance(enabled, str):
+            enabled = enabled.lower() in ['true', '1', 'yes', 'on']
+        else:
+            enabled = bool(enabled)
+        
+        # Log for debugging
+        logger.info(f"Toggle model request - type: {model_type}, enabled: {enabled}, model_type_enabled: {model_type_enabled}")
         
         # Validate model type
         if model_type not in ["detection", "classification", "pose", "action", "segmentation"]:
@@ -125,6 +144,8 @@ async def toggle_model(request):
         })
     except Exception as e:
         logger.error(f"Error toggling model: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         content = json.dumps({
             'success': False,
             'error': str(e)
@@ -143,9 +164,15 @@ async def get_model_states(request):
         )
     
     try:
-        # Extract model type from the URL
+        # Extract model type from the URL (e.g., "classification_enabled")
         model_type_enabled = request.match_info.get('model_type', '')
-        model_type = model_type_enabled.replace('_enabled', '')
+        
+        # Remove '_enabled' to get just the model type
+        if model_type_enabled.endswith('_enabled'):
+            model_type = model_type_enabled[:-8]  # Remove '_enabled' (8 characters)
+        else:
+            model_type = model_type_enabled
+            model_type_enabled = f"{model_type}_enabled"
         
         # Get the state
         enabled = stream_manager.get_model_state(model_type)

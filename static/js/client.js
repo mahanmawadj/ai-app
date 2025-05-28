@@ -154,18 +154,40 @@ changeModelBtns.forEach((btn, index) => {
         if (!selector || !statusEl) return;
 
         const selectedModel = selector.value;
-        statusEl.textContent = "Changing...";
+        statusEl.textContent = "Loading...";
+
+        // Disable the button during loading
+        btn.disabled = true;
 
         try {
-            // For now, we only have the classification model change API implemented
-            if (index === 0) {  // Classification model
+            // Determine model type based on section
+            let modelType = null;
+            const sectionTitle = section.querySelector('h6').textContent;
+
+            if (sectionTitle.includes('Classification')) {
+                modelType = 'classification';
+            } else if (sectionTitle.includes('Detection')) {
+                modelType = 'detection';
+            } else if (sectionTitle.includes('Pose')) {
+                modelType = 'pose';
+            } else if (sectionTitle.includes('Action')) {
+                modelType = 'action';
+            } else if (sectionTitle.includes('Segmentation')) {
+                modelType = 'segmentation';
+            }
+
+            if (modelType) {
+                // Show conversion status
+                statusEl.textContent = "Converting to TensorRT...";
+
                 const response = await fetch('/api/model/change', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        model_name: selectedModel
+                        model_name: selectedModel,
+                        model_type: modelType
                     })
                 });
 
@@ -173,19 +195,26 @@ changeModelBtns.forEach((btn, index) => {
 
                 if (data.success) {
                     statusEl.textContent = selectedModel;
+
+                    // Update the global current model display if this is classification
+                    if (modelType === 'classification') {
+                        currentModelEl.textContent = selectedModel;
+                    }
                 } else {
                     statusEl.textContent = "Error: " + data.error;
+                    console.error('Error changing model:', data.error);
+                    alert(`Failed to change model: ${data.error}`);
                 }
             } else {
-                // Placeholder for other model types (will be implemented later)
-                // For now, just update the UI to show it's changed
-                setTimeout(() => {
-                    statusEl.textContent = selectedModel;
-                }, 500);
+                statusEl.textContent = "Unknown model type";
             }
         } catch (error) {
             console.error('Error changing model:', error);
             statusEl.textContent = "Error changing model";
+            alert(`Error: ${error.message}`);
+        } finally {
+            // Re-enable the button
+            btn.disabled = false;
         }
     });
 });
@@ -200,7 +229,7 @@ startButton.addEventListener('click', async () => {
         stopButton.disabled = false;
         streamActive = true;
 
-        //await initModelStates();
+        // No need to init model states on start - they persist
     } catch (error) {
         console.error('Error starting stream:', error);
     }
@@ -220,9 +249,18 @@ stopButton.addEventListener('click', async () => {
     }
 });
 
-// Toggle model API
+// Toggle model API - Updated for lazy loading
 async function toggleModel(endpoint, enabled) {
     try {
+        const toggle = document.getElementById(endpoint.replace('_enabled', 'Enabled'));
+        const section = toggle.closest('.model-section');
+        const statusEl = section.querySelector('.model-status');
+
+        // Show loading state if enabling
+        if (enabled && statusEl) {
+            statusEl.textContent = "Loading...";
+        }
+
         const response = await fetch(`/api/${endpoint}`, {
             method: 'PUT',
             headers: {
@@ -231,11 +269,31 @@ async function toggleModel(endpoint, enabled) {
             body: JSON.stringify({ [endpoint]: enabled })
         });
 
-        if (!response.ok) {
-            console.error(`Failed to set ${endpoint}: ${response.statusText}`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            console.error(`Failed to set ${endpoint}: ${data.error || response.statusText}`);
+            // Revert toggle if failed
+            toggle.checked = !enabled;
+
+            if (statusEl) {
+                statusEl.textContent = "Error loading model";
+            }
+
+            // Show error to user
+            alert(`Failed to ${enabled ? 'enable' : 'disable'} model: ${data.error || 'Unknown error'}`);
+        } else {
+            // If successfully enabled, restore the model name
+            if (enabled && statusEl) {
+                const selector = section.querySelector('select');
+                if (selector) {
+                    statusEl.textContent = selector.value;
+                }
+            }
         }
     } catch (error) {
         console.error(`Error setting ${endpoint}:`, error);
+        alert(`Error: ${error.message}`);
     }
 }
 
@@ -583,10 +641,15 @@ async function fetchCurrentModel() {
     try {
         const response = await fetch('/api/model');
         const data = await response.json();
-        currentModelEl.textContent = data.model_name;
-        // Set the select value
-        if (modelSelector.querySelector(`option[value="${data.model_name}"]`)) {
-            modelSelector.value = data.model_name;
+
+        if (data.model_name) {
+            currentModelEl.textContent = data.model_name;
+            // Set the select value if it's classification
+            if (data.model_type === 'classification' && modelSelector.querySelector(`option[value="${data.model_name}"]`)) {
+                modelSelector.value = data.model_name;
+            }
+        } else {
+            currentModelEl.textContent = "No model loaded";
         }
     } catch (error) {
         console.error('Error fetching current model:', error);
@@ -594,10 +657,50 @@ async function fetchCurrentModel() {
     }
 }
 
+// Fetch and populate available models
+async function fetchAvailableModels() {
+    try {
+        const response = await fetch('/api/models');
+        const data = await response.json();
+
+        if (data.models) {
+            // Update model selectors for each type
+            const modelSections = document.querySelectorAll('.model-section');
+            modelSections.forEach(section => {
+                const select = section.querySelector('select');
+                const sectionTitle = section.querySelector('h6').textContent;
+
+                let modelType = null;
+                if (sectionTitle.includes('Classification')) modelType = 'classification';
+                else if (sectionTitle.includes('Detection')) modelType = 'detection';
+                else if (sectionTitle.includes('Pose')) modelType = 'pose';
+                else if (sectionTitle.includes('Action')) modelType = 'action';
+                else if (sectionTitle.includes('Segmentation')) modelType = 'segmentation';
+
+                if (modelType && data.models[modelType] && select) {
+                    // Clear existing options
+                    select.innerHTML = '';
+
+                    // Add available models
+                    data.models[modelType].forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = model;
+                        option.textContent = model;
+                        select.appendChild(option);
+                    });
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Error fetching available models:', error);
+    }
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     enumerateInputDevices();
     fetchCurrentModel();
+    fetchAvailableModels();
     initModelStates();
 
     // Check 'Use Video' by default

@@ -248,15 +248,71 @@ class StreamManager:
                 if not success:
                     return False, error
                 
+                # Get model info
+                model_info = self.model_handler.get_model_info()
+                
+                # Check what formats are available and build a clean model_info
+                has_engine = model_info.get('has_trt', False) and os.path.exists(model_info.get('trt_path', ''))
+                has_onnx = model_info.get('has_onnx', False) and os.path.exists(model_info.get('onnx_path', ''))
+                has_pytorch = model_info.get('has_pytorch', False) and os.path.exists(model_info.get('pytorch_path', ''))
+                
+                # Create a clean model_info with only existing paths
+                clean_model_info = model_info.copy()
+                
+                # Remove non-existent paths so base.py uses the right fallback
+                if not has_engine:
+                    clean_model_info.pop('trt_path', None)
+                    clean_model_info['has_trt'] = False
+                
+                if not has_onnx:
+                    clean_model_info.pop('onnx_path', None)
+                    clean_model_info['has_onnx'] = False
+                
+                # Determine what we have and what we need
+                if has_engine:
+                    logger.info(f"TensorRT engine found for {model_name}")
+                elif has_onnx:
+                    logger.info(f"ONNX model found for {model_name}. TensorRT will convert it automatically.")
+                    # Make sure the ONNX path is available for base.py to use
+                    clean_model_info['path'] = clean_model_info['onnx_path']
+                elif has_pytorch:
+                    logger.info(f"Only PyTorch model found for {model_name}.")
+                    
+                    # Check if ONNX is available for conversion
+                    if not self.model_handler.has_onnx:
+                        error_msg = (
+                            "Model conversion requires ONNX. Please install it with:\n"
+                            "pip install onnx onnxruntime\n\n"
+                            "Alternatively, you can:\n"
+                            "1. Download a pre-converted .onnx or .engine file\n"
+                            "2. Convert the model on another machine and copy the files"
+                        )
+                        logger.error(error_msg)
+                        return False, error_msg
+                    
+                    # Try to convert PyTorch to ONNX
+                    logger.info(f"Converting {model_name} from PyTorch to ONNX...")
+                    onnx_path = self.model_handler.pytorch_to_onnx(model_name, model_type)
+                    if not onnx_path:
+                        return False, "Failed to convert model to ONNX format"
+                    
+                    # Reload model info after conversion
+                    self.model_handler._load_model(model_name, model_type)
+                    model_info = self.model_handler.get_model_info()
+                    # Set the path to the ONNX file
+                    model_info['path'] = model_info['onnx_path']
+                else:
+                    return False, f"No model files found for {model_name}"
+                
                 # If this model type is loaded, update it
                 if model_type in self.inference_models:
                     logger.info(f"Updating {model_type} inference module with new model: {model_name}")
                     
-                    # Get updated model info and labels
-                    model_info = self.model_handler.get_model_info()
+                    # Get labels
                     labels = self.model_handler.get_labels()
                     
                     # Update the inference module
+                    # The inference module will handle ONNX to TensorRT conversion if needed
                     success = self.inference_models[model_type].update_model(model_info, labels)
                     
                     if not success:
@@ -266,6 +322,7 @@ class StreamManager:
                 
             except Exception as e:
                 logger.error(f"Error changing model: {e}")
+                logger.error(traceback.format_exc())
                 return False, str(e)
 
     async def handle_offer(self, request):
@@ -281,8 +338,6 @@ class StreamManager:
             logger.info(pc_id + " " + msg, *args)
 
         log_info("Created for %s", request.remote)
-
-        player = MediaPlayer(os.path.join(ROOT, "demo-instruct.wav"))
 
         @pc.on("datachannel")
         def on_datachannel(channel):
@@ -301,9 +356,8 @@ class StreamManager:
         @pc.on("track")
         def on_track(track):
             log_info("Track %s received", track.kind)
-            if track.kind == "audio":
-                pc.addTrack(player.audio)
-            elif track.kind == "video":
+
+            if track.kind == "video":
                 pc.addTrack(
                     VideoTransformTrack(
                         relay.subscribe(track), self
